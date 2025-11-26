@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Direction 2: Distribution + Outliers</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #ffffff;
+      padding: 40px;
+      min-height: 100vh;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 32px;
+    }
+    
+    .title {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .security-name {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .current-price {
+      font-size: 32px;
+      font-weight: 700;
+      color: #10b981;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .viz-container {
+      background: #111;
+      border-radius: 12px;
+      padding: 40px;
+      position: relative;
+    }
+    
+    .axis-label {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+    
+    .distribution-container {
+      position: relative;
+      height: 400px;
+      margin: 40px 0;
+    }
+    
+    .spread-axis {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: #333;
+    }
+    
+    .spread-markers {
+      position: absolute;
+      bottom: -24px;
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: space-between;
+    }
+    
+    .spread-marker {
+      font-size: 11px;
+      color: #666;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .density-layer {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 100%;
+    }
+    
+    .density-area {
+      position: absolute;
+      bottom: 0;
+      opacity: 0.15;
+      transition: opacity 0.3s ease;
+    }
+    
+    .density-area.won {
+      background: linear-gradient(to top, #10b981, transparent);
+    }
+    
+    .density-area.lost {
+      background: linear-gradient(to top, #ef4444, transparent);
+    }
+    
+    .current-price-line {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: -24px;
+      width: 2px;
+      background: #10b981;
+      transform: translateX(-1px);
+      z-index: 5;
+    }
+    
+    .current-price-label {
+      position: absolute;
+      left: 50%;
+      top: -32px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: #10b981;
+      font-weight: 600;
+      white-space: nowrap;
+      background: #111;
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid #10b981;
+    }
+    
+    .data-points {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 100%;
+    }
+    
+    .data-point {
+      position: absolute;
+      border-radius: 50%;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: white;
+      border: 2px solid rgba(0, 0, 0, 0.3);
+    }
+    
+    .data-point:hover {
+      transform: scale(1.3);
+      z-index: 10;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+    
+    .data-point.won {
+      background: #10b981;
+    }
+    
+    .data-point.lost {
+      background: #ef4444;
+    }
+    
+    .data-point.covered {
+      background: #eab308;
+    }
+    
+    .data-point.pass {
+      background: #9ca3af;
+    }
+    
+    .stats-panel {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 40px;
+      padding-top: 32px;
+      border-top: 1px solid #222;
+    }
+    
+    .stat-card {
+      background: #0a0a0a;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #222;
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .stat-value.positive {
+      color: #10b981;
+    }
+    
+    .stat-value.negative {
+      color: #ef4444;
+    }
+    
+    .stat-value.neutral {
+      color: #eab308;
+    }
+    
+    .tooltip {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.95);
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 20px;
+    }
+    
+    .tooltip-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .tooltip-label {
+      color: #888;
+    }
+    
+    .tooltip-value {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    
+    .legend {
+      display: flex;
+      gap: 24px;
+      margin-top: 24px;
+    }
+    
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #888;
+    }
+    
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Distribution Analysis</div>
+      <div class="security-name" id="securityName"></div>
+      <div class="current-price" id="currentPrice"></div>
+    </div>
+    
+    <div class="viz-container">
+      <div class="axis-label">Historical RFQ Distribution by Spread</div>
+      
+      <div class="distribution-container">
+        <div class="density-layer" id="densityLayer"></div>
+        <div class="data-points" id="dataPoints"></div>
+        <div class="current-price-line">
+          <div class="current-price-label">Current Price</div>
+        </div>
+        <div class="spread-axis"></div>
+        <div class="spread-markers">
+          <span class="spread-marker">-30</span>
+          <span class="spread-marker">-20</span>
+          <span class="spread-marker">-10</span>
+          <span class="spread-marker" style="color: #10b981; font-weight: 600;">0</span>
+          <span class="spread-marker">+10</span>
+          <span class="spread-marker">+20</span>
+          <span class="spread-marker">+30</span>
+        </div>
+      </div>
+      
+      <div class="stats-panel">
+        <div class="stat-card">
+          <div class="stat-label">Win Rate</div>
+          <div class="stat-value positive" id="winRate"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Win Spread</div>
+          <div class="stat-value positive" id="avgWinSpread"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Avg Loss Spread</div>
+          <div class="stat-value negative" id="avgLossSpread"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total Volume</div>
+          <div class="stat-value" id="totalVolume"></div>
+        </div>
+      </div>
+      
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #10b981;"></div>
+          <span>Won</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #ef4444;"></div>
+          <span>Lost</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #eab308;"></div>
+          <span>Covered</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #9ca3af;"></div>
+          <span>Client Pass</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="tooltip" id="tooltip"></div>
+
+  <script type="module">
+    const bondData = {
+      currentPrice: 0,
+      currentPriceValue: "87.966",
+      securityName: "ERSTBK 3.250 08/27/32C31",
+      historicalRFQs: [
+        { id: 1, timestamp: "2025-10-28T14:30:00", spread: 8, size: 5000000, outcome: "won", color: "#10b981" },
+        { id: 2, timestamp: "2025-10-28T11:15:00", spread: -12, size: 3000000, outcome: "lost", color: "#ef4444" },
+        { id: 3, timestamp: "2025-10-27T16:45:00", spread: 15, size: 8000000, outcome: "won", color: "#10b981" },
+        { id: 4, timestamp: "2025-10-27T10:20:00", spread: -5, size: 4500000, outcome: "covered", color: "#eab308" },
+        { id: 5, timestamp: "2025-10-25T14:00:00", spread: -20, size: 2000000, outcome: "lost", color: "#ef4444" },
+        { id: 6, timestamp: "2025-10-24T09:30:00", spread: 5, size: 6000000, outcome: "pass", color: "#9ca3af" },
+        { id: 7, timestamp: "2025-10-23T15:45:00", spread: 18, size: 3500000, outcome: "won", color: "#10b981" },
+        { id: 8, timestamp: "2025-10-22T11:00:00", spread: -8, size: 5500000, outcome: "covered", color: "#eab308" },
+        { id: 9, timestamp: "2025-10-21T13:20:00", spread: 22, size: 2500000, outcome: "lost", color: "#ef4444" },
+        { id: 10, timestamp: "2025-10-18T10:15:00", spread: 12, size: 7000000, outcome: "won", color: "#10b981" }
+      ]
+    };
+
+    function getRelativeTime(timestamp) {
+      const now = new Date();
+      const past = new Date(timestamp);
+      const diffMs = now - past;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      
+      if (diffMins < 60) return `${diffMins}m`;
+      if (diffHours < 24) return `${diffHours}h`;
+      if (diffDays === 1) return '1d';
+      if (diffDays < 7) return `${diffDays}d`;
+      return `${Math.floor(diffDays / 7)}w`;
+    }
+
+    function formatAmount(amount) {
+      return `€${(amount / 1000000).toFixed(1)}M`;
+    }
+
+    function getOutcomeLabel(outcome) {
+      const labels = {
+        won: 'Won',
+        lost: 'Lost',
+        covered: 'Covered',
+        pass: 'Client Pass'
+      };
+      return labels[outcome] || outcome;
+    }
+
+    // Set header info
+    document.getElementById('securityName').textContent = bondData.securityName;
+    document.getElementById('currentPrice').textContent = bondData.currentPriceValue;
+
+    const tooltip = document.getElementById('tooltip');
+    const minSpread = -30;
+    const maxSpread = 30;
+    const spreadRange = maxSpread - minSpread;
+
+    // Calculate statistics
+    const wonDeals = bondData.historicalRFQs.filter(r => r.outcome === 'won');
+    const lostDeals = bondData.historicalRFQs.filter(r => r.outcome === 'lost');
+    const tradedDeals = bondData.historicalRFQs.filter(r => r.outcome !== 'pass');
+    
+    const winRate = ((wonDeals.length / tradedDeals.length) * 100).toFixed(0);
+    const avgWinSpread = (wonDeals.reduce((sum, r) => sum + r.spread, 0) / wonDeals.length).toFixed(1);
+    const avgLossSpread = (lostDeals.reduce((sum, r) => sum + r.spread, 0) / lostDeals.length).toFixed(1);
+    const totalVolume = bondData.historicalRFQs.reduce((sum, r) => sum + r.size, 0);
+
+    document.getElementById('winRate').textContent = `${winRate}%`;
+    document.getElementById('avgWinSpread').textContent = `+${avgWinSpread} bps`;
+    document.getElementById('avgLossSpread').textContent = `${avgLossSpread} bps`;
+    document.getElementById('totalVolume').textContent = formatAmount(totalVolume);
+
+    // Create density visualization
+    const densityLayer = document.getElementById('densityLayer');
+    
+    // Calculate center position and spread ranges for both sides
+    const wonSpreads = wonDeals.map(r => r.spread);
+    const lostSpreads = lostDeals.map(r => r.spread);
+    
+    if (wonDeals.length > 0) {
+      // Won deals density (right side - positive spreads)
+      const wonArea = document.createElement('div');
+      wonArea.className = 'density-area won';
+      const minWonSpread = Math.max(0, Math.min(...wonSpreads)); // Start from 0 or first positive spread
+      const maxWonSpread = Math.max(...wonSpreads);
+      const wonWidth = ((maxWonSpread - minWonSpread) / spreadRange) * 100;
+      const wonStart = ((minWonSpread - minSpread) / spreadRange) * 100;
+      
+      wonArea.style.left = `${wonStart}%`;
+      wonArea.style.width = `${wonWidth}%`;
+      wonArea.style.height = `${(wonDeals.length / bondData.historicalRFQs.length) * 100}%`;
+      densityLayer.appendChild(wonArea);
+    }
+
+    if (lostDeals.length > 0) {
+      // Lost deals density (left side - negative spreads)
+      const lostArea = document.createElement('div');
+      lostArea.className = 'density-area lost';
+      const minLostSpread = Math.min(...lostSpreads);
+      const maxLostSpread = Math.min(0, Math.max(...lostSpreads)); // End at 0 or last negative spread
+      const lostWidth = ((maxLostSpread - minLostSpread) / spreadRange) * 100;
+      const lostStart = ((minLostSpread - minSpread) / spreadRange) * 100;
+      
+      lostArea.style.left = `${lostStart}%`;
+      lostArea.style.width = `${lostWidth}%`;
+      lostArea.style.height = `${(lostDeals.length / bondData.historicalRFQs.length) * 100}%`;
+      densityLayer.appendChild(lostArea);
+    }
+
+    // Create data points
+    const dataPoints = document.getElementById('dataPoints');
+    const maxSize = Math.max(...bondData.historicalRFQs.map(r => r.size));
+
+    bondData.historicalRFQs.forEach((rfq, index) => {
+      const point = document.createElement('div');
+      point.className = `data-point ${rfq.outcome}`;
+      
+      // Position based on spread
+      const spreadPercent = ((rfq.spread - minSpread) / spreadRange) * 100;
+      point.style.left = `${spreadPercent}%`;
+      
+      // Size based on volume (20-60px)
+      const size = 20 + ((rfq.size / maxSize) * 40);
+      point.style.width = `${size}px`;
+      point.style.height = `${size}px`;
+      
+      // Vertical position - stagger to avoid overlap
+      const baseHeight = 20;
+      const verticalOffset = (index % 3) * 80;
+      point.style.bottom = `${baseHeight + verticalOffset}px`;
+      
+      point.style.transform = 'translateX(-50%)';
+      
+      // Show spread value inside larger circles
+      if (size > 30) {
+        point.textContent = rfq.spread > 0 ? `+${rfq.spread}` : rfq.spread;
+      }
+      
+      // Tooltip
+      point.addEventListener('mouseenter', (e) => {
+        tooltip.innerHTML = `
+          <div class="tooltip-row">
+            <span class="tooltip-label">Time:</span>
+            <span class="tooltip-value">${getRelativeTime(rfq.timestamp)} ago</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Spread:</span>
+            <span class="tooltip-value">${rfq.spread > 0 ? '+' : ''}${rfq.spread} bps</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Size:</span>
+            <span class="tooltip-value">${formatAmount(rfq.size)}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Outcome:</span>
+            <span class="tooltip-value" style="color: ${rfq.color}">${getOutcomeLabel(rfq.outcome)}</span>
+          </div>
+        `;
+        tooltip.style.display = 'block';
+      });
+      
+      point.addEventListener('mousemove', (e) => {
+        tooltip.style.left = (e.clientX + 20) + 'px';
+        tooltip.style.top = (e.clientY - 20) + 'px';
+      });
+      
+      point.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+      
+      dataPoints.appendChild(point);
+    });
+  </script>
+</body>
+</html>

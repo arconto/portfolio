@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RFQ History Analysis • Timeline Swim Lanes</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a; color: #ffffff; padding: 40px; min-height: 100vh;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 32px; }
+    .title { font-size: 14px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .security-name { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .current-price { font-size: 32px; font-weight: 700; color: #10b981; font-variant-numeric: tabular-nums; }
+    
+    /* 8 KPI Cards from v5 */
+    .metrics-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 16px; }
+    .metrics-panel-extended { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+    .metric-card { background: #111; padding: 20px; border-radius: 8px; border: 1px solid #222; transition: all 0.2s ease; }
+    .metric-card:hover { border-color: #333; transform: translateY(-2px); }
+    .metric-card.warning { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+    .metric-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+    .metric-context { font-size: 11px; color: #888; margin-top: 4px; }
+    .metric-value.positive { color: #10b981; }
+    .metric-value.negative { color: #ef4444; }
+    .metric-value.neutral { color: #fff; }
+    .metric-value.warning { color: #f59e0b; }
+    .trend-arrow { font-size: 18px; vertical-align: middle; }
+    .warning-icon { font-size: 20px; color: #f59e0b; }
+    
+    .viz-container { background: #111; border-radius: 12px; padding: 40px; position: relative; }
+    .axis-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; }
+    .spread-axis { display: flex; justify-content: space-between; margin-bottom: 8px; padding: 0 60px; position: relative; }
+    .spread-marker { font-size: 11px; color: #666; font-variant-numeric: tabular-nums; }
+    .timeline-container { position: relative; margin-top: 24px; }
+    .current-price-line { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #10b981; transform: translateX(-1px); z-index: 1; }
+    .current-price-label { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); font-size: 12px; color: #10b981; font-weight: 600; white-space: nowrap; }
+    
+    /* Bar styling from v1 with v5 side indicators */
+    .rfq-row { display: flex; align-items: center; margin-bottom: 12px; position: relative; height: 48px; transition: all 0.2s ease; }
+    .rfq-row:hover { transform: translateX(4px); }
+    .rfq-time { width: 60px; font-size: 11px; color: #888; font-variant-numeric: tabular-nums; text-align: right; padding-right: 12px; }
+    .rfq-bar-container { flex: 1; position: relative; height: 100%; }
+    .rfq-bar { 
+      position: absolute; 
+      height: 32px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-radius: 4px; 
+      cursor: pointer; 
+      transition: all 0.2s ease; 
+      display: flex; 
+      align-items: center; 
+      padding: 0 12px;
+    }
+    .rfq-bar.buy { 
+      border-top: 3px solid #3b82f6; 
+    }
+    .rfq-bar.sell { 
+      border-bottom: 3px solid #f97316; 
+    }
+    .rfq-bar:hover { 
+      filter: brightness(1.2); 
+      transform: translateY(-50%) scale(1.05);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      z-index: 10;
+    }
+    
+    /* Side indicators from v5 */
+    .side-indicator { 
+      position: absolute; 
+      font-size: 14px; 
+      font-weight: 700; 
+      top: 50%; 
+      transform: translateY(-50%); 
+    }
+    .side-indicator.buy { color: #3b82f6; }
+    .side-indicator.sell { color: #f97316; }
+    .rfq-bar.positive .side-indicator { right: -24px; }
+    .rfq-bar.negative .side-indicator { left: -24px; }
+    
+    /* Ghost bar for cover price margin */
+    .cover-ghost {
+      position: absolute;
+      height: 32px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-radius: 4px;
+      cursor: pointer;
+      opacity: 0.35;
+      transition: all 0.2s ease;
+      pointer-events: all;
+      z-index: 0;
+    }
+    .cover-ghost:hover {
+      opacity: 0.5;
+    }
+    .rfq-bar {
+      z-index: 1;
+    }
+    
+    .rfq-bar-label { font-size: 11px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    
+    .rfq-size-indicator {
+      position: absolute;
+      right: 12px;
+      font-size: 10px;
+      color: #888;
+      font-variant-numeric: tabular-nums;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 2px 6px;
+      border-radius: 3px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    
+    .rfq-row:hover .rfq-size-indicator {
+      opacity: 1;
+    }
+    
+    .tooltip {
+      position: fixed;
+      background: rgba(0, 0, 0, 0.95);
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+      gap: 20px;
+    }
+    .tooltip-row:last-child { margin-bottom: 0; }
+    .tooltip-label { color: #888; }
+    .tooltip-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    
+    .legend { 
+      display: flex; 
+      gap: 24px; 
+      margin-top: 24px; 
+      padding-top: 24px; 
+      border-top: 1px solid #222; 
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #888; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    .legend-arrow { font-size: 16px; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">RFQ History Analysis • Timeline Swim Lanes</div>
+      <div class="security-name" id="securityName"></div>
+      <div class="current-price" id="currentPrice"></div>
+    </div>
+    
+    <!-- 8 KPIs from v5 -->
+    <div class="metrics-panel">
+      <div class="metric-card">
+        <div class="metric-label">Recent Performance</div>
+        <div class="metric-value positive" id="recentWinRate"></div>
+        <div class="metric-context">Last 5 deals</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Trend</div>
+        <div class="metric-value" id="trendDirection"></div>
+        <div class="metric-context">vs previous 5 deals</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Volume Trend</div>
+        <div class="metric-value" id="avgVolumeTrend"></div>
+        <div class="metric-context">Volume trajectory</div>
+      </div>
+      <div class="metric-card" id="bidAskCard">
+        <div class="metric-label">Bid/Ask Balance</div>
+        <div class="metric-value neutral" id="bidAskBalance"></div>
+        <div class="metric-context" id="bidAskContext">Normal distribution</div>
+      </div>
+    </div>
+    
+    <div class="metrics-panel-extended">
+      <div class="metric-card">
+        <div class="metric-label">Last 24h Volume</div>
+        <div class="metric-value neutral" id="recentVolume"></div>
+        <div class="metric-context">Recent activity</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total Volume</div>
+        <div class="metric-value neutral" id="totalVolume"></div>
+        <div class="metric-context">All deals</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Avg Deal Frequency</div>
+        <div class="metric-value neutral" id="avgFrequency"></div>
+        <div class="metric-context">Time between RFQs</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Frequency Change</div>
+        <div class="metric-value" id="frequencyChange"></div>
+        <div class="metric-context" id="frequencyContext">Deal pace trend</div>
+      </div>
+    </div>
+    
+    <div class="viz-container">
+      <div class="axis-label">Spread (basis points) • Distance from Current Price</div>
+      <div class="spread-axis">
+        <span class="spread-marker">-30</span>
+        <span class="spread-marker">-20</span>
+        <span class="spread-marker">-10</span>
+        <span class="spread-marker" style="color: #10b981; font-weight: 600;">0</span>
+        <span class="spread-marker">+10</span>
+        <span class="spread-marker">+20</span>
+        <span class="spread-marker">+30</span>
+      </div>
+      
+      <div class="timeline-container" id="timeline">
+        <div class="current-price-line"></div>
+        <div class="current-price-label">Current Price</div>
+      </div>
+      
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #10b981;"></div>
+          <span>Won</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #ef4444;"></div>
+          <span>Lost</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #eab308;"></div>
+          <span>Covered</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background: #9ca3af;"></div>
+          <span>Client Pass</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-arrow" style="color: #3b82f6;">▲</span>
+          <span>Buy (Bid)</span>
+        </div>
+        <div class="legend-item">
+          <span class="legend-arrow" style="color: #f97316;">▼</span>
+          <span>Sell (Ask)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    const bondData = {
+      currentPrice: 0,
+      currentPriceValue: "87.966",
+      securityName: "ERSTBK 3.250 08/27/32C31",
+      historicalRFQs: [
+        // Recent RFQs (last 2 days)
+        { id: 1, timestamp: "2025-10-28T14:30:00", spread: -8, size: 5000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -10 },
+        { id: 2, timestamp: "2025-10-28T11:15:00", spread: 12, size: 3000000, outcome: "lost", color: "#ef4444", side: "sell", coverSpread: 10 },
+        { id: 3, timestamp: "2025-10-27T16:45:00", spread: -15, size: 8000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -18 },
+        { id: 4, timestamp: "2025-10-27T10:20:00", spread: 5, size: 4500000, outcome: "covered", color: "#eab308", side: "sell", coverSpread: 3 },
+        
+        // Mid-period RFQs (3-5 days ago)
+        { id: 5, timestamp: "2025-10-25T14:00:00", spread: 20, size: 2000000, outcome: "lost", color: "#ef4444", side: "sell", coverSpread: 18 },
+        { id: 6, timestamp: "2025-10-24T09:30:00", spread: -5, size: 6000000, outcome: "pass", color: "#9ca3af", side: "buy" },
+        { id: 7, timestamp: "2025-10-23T15:45:00", spread: -18, size: 3500000, outcome: "covered", color: "#eab308", side: "buy", coverSpread: -20 },
+        
+        // Older RFQs (1+ weeks ago)
+        { id: 8, timestamp: "2025-10-22T11:00:00", spread: 8, size: 5500000, outcome: "won", color: "#10b981", side: "sell", coverSpread: 11 },
+        { id: 9, timestamp: "2025-10-21T13:20:00", spread: -22, size: 2500000, outcome: "lost", color: "#ef4444", side: "buy", coverSpread: -20 },
+        { id: 10, timestamp: "2025-10-18T10:15:00", spread: -12, size: 7000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -14 }
+      ]
+    };
+
+    function getRelativeTime(timestamp) {
+      const now = new Date();
+      const past = new Date(timestamp);
+      const diffMs = now - past;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      
+      if (diffMins < 60) return `${diffMins}m`;
+      if (diffHours < 24) return `${diffHours}h`;
+      if (diffDays === 1) return '1d';
+      if (diffDays < 7) return `${diffDays}d`;
+      return `${Math.floor(diffDays / 7)}w`;
+    }
+
+    function formatAmount(amount) {
+      return `€${(amount / 1000000).toFixed(1)}M`;
+    }
+
+    function getOutcomeLabel(outcome) {
+      const labels = {
+        won: 'Won',
+        lost: 'Lost',
+        covered: 'Covered',
+        pass: 'Client Pass'
+      };
+      return labels[outcome] || outcome;
+    }
+
+    // Set header info
+    document.getElementById('securityName').textContent = bondData.securityName;
+    document.getElementById('currentPrice').textContent = bondData.currentPriceValue;
+
+    // Create timeline with v1 positioning logic
+    const timeline = document.getElementById('timeline');
+    const tooltip = document.getElementById('tooltip');
+    
+    const minSpread = -30;
+    const maxSpread = 30;
+    const spreadRange = maxSpread - minSpread;
+
+    bondData.historicalRFQs.forEach(rfq => {
+      const row = document.createElement('div');
+      row.className = 'rfq-row';
+      
+      const time = document.createElement('div');
+      time.className = 'rfq-time';
+      time.textContent = getRelativeTime(rfq.timestamp);
+      
+      const barContainer = document.createElement('div');
+      barContainer.className = 'rfq-bar-container';
+      
+      const bar = document.createElement('div');
+      bar.className = `rfq-bar ${rfq.side} ${rfq.spread >= 0 ? 'positive' : 'negative'}`;
+      bar.style.background = rfq.color;
+      
+      // V1 POSITIONING LOGIC: bars positioned by their spread from center
+      const centerPercent = 50;
+      const spreadPercent = (rfq.spread / spreadRange) * 100;
+      const position = centerPercent + spreadPercent;
+      
+      // Bar width represents size (2-15% of container)
+      const maxSize = Math.max(...bondData.historicalRFQs.map(r => r.size));
+      const widthPercent = 2 + ((rfq.size / maxSize) * 13);
+      
+      // Create ghost bar for cover price if this deal has competition data
+      if (rfq.coverSpread !== undefined && rfq.outcome !== 'pass') {
+        const ghost = document.createElement('div');
+        ghost.className = 'cover-ghost';
+        
+        // Yellow ghost for won deals, same color otherwise
+        if (rfq.outcome === 'won') {
+          ghost.style.background = '#eab308';
+        } else {
+          ghost.style.background = rfq.color;
+        }
+        
+        const margin = Math.abs(rfq.coverSpread - rfq.spread);
+        const marginPercent = (margin / spreadRange) * 100;
+        
+        // Position ghost RIGHT NEXT TO the bar
+        // Buy side (negative spread): ghost goes on the RIGHT of bar (toward center)
+        // Sell side (positive spread): ghost goes on the LEFT of bar (toward center)
+        if (rfq.spread >= 0) {
+          // Sell side - ghost on LEFT of bar (toward center)
+          ghost.style.left = `${position - marginPercent}%`;
+          ghost.style.width = `${marginPercent}%`;
+        } else {
+          // Buy side - ghost on RIGHT of bar (toward center)
+          // Bar is positioned with right at (100-position), extends leftward by widthPercent
+          // So bar's right edge is at position%, ghost extends right from there
+          ghost.style.left = `${position}%`;
+          ghost.style.width = `${marginPercent}%`;
+        }
+        
+        // Ghost bar tooltip - different messaging for won/covered vs lost
+        ghost.addEventListener('mouseenter', (e) => {
+          if (rfq.outcome === 'won' || rfq.outcome === 'covered') {
+            tooltip.innerHTML = `
+              <div class="tooltip-row">
+                <span class="tooltip-label">Competitive Margin:</span>
+                <span class="tooltip-value" style="color: #10b981">+${margin} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Our Price:</span>
+                <span class="tooltip-value">${rfq.spread > 0 ? '+' : ''}${rfq.spread} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Cover Price:</span>
+                <span class="tooltip-value">${rfq.coverSpread > 0 ? '+' : ''}${rfq.coverSpread} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Result:</span>
+                <span class="tooltip-value" style="color: ${rfq.color}">${rfq.outcome === 'won' ? 'Won' : 'Covered'} by ${margin} bps</span>
+              </div>
+            `;
+          } else if (rfq.outcome === 'lost') {
+            tooltip.innerHTML = `
+              <div class="tooltip-row">
+                <span class="tooltip-label">Lost By:</span>
+                <span class="tooltip-value" style="color: #ef4444">${margin} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Our Price:</span>
+                <span class="tooltip-value">${rfq.spread > 0 ? '+' : ''}${rfq.spread} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Winning Price:</span>
+                <span class="tooltip-value">${rfq.coverSpread > 0 ? '+' : ''}${rfq.coverSpread} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Result:</span>
+                <span class="tooltip-value" style="color: ${rfq.color}">Outbid by ${margin} bps</span>
+              </div>
+            `;
+          }
+          tooltip.style.display = 'block';
+        });
+        
+        ghost.addEventListener('mousemove', (e) => {
+          tooltip.style.left = (e.clientX + 20) + 'px';
+          tooltip.style.top = (e.clientY - 20) + 'px';
+        });
+        
+        ghost.addEventListener('mouseleave', () => {
+          tooltip.style.display = 'none';
+        });
+        
+        barContainer.appendChild(ghost);
+      }
+      
+      if (rfq.spread >= 0) {
+        bar.style.left = `${position}%`;
+        bar.style.width = `${widthPercent}%`;
+      } else {
+        bar.style.right = `${100 - position}%`;
+        bar.style.width = `${widthPercent}%`;
+      }
+      
+      const label = document.createElement('div');
+      label.className = 'rfq-bar-label';
+      label.textContent = `${rfq.spread > 0 ? '+' : ''}${rfq.spread}`;
+      bar.appendChild(label);
+      
+      // V5 ADDITION: Side indicators
+      const sideIndicator = document.createElement('div');
+      sideIndicator.className = `side-indicator ${rfq.side}`;
+      sideIndicator.textContent = rfq.side === 'buy' ? '▲' : '▼';
+      bar.appendChild(sideIndicator);
+      
+      // V5 ADDITION: Enhanced tooltip with side info
+      bar.addEventListener('mouseenter', (e) => {
+        tooltip.innerHTML = `
+          <div class="tooltip-row">
+            <span class="tooltip-label">Side:</span>
+            <span class="tooltip-value" style="color: ${rfq.side === 'buy' ? '#3b82f6' : '#f97316'}">
+              ${rfq.side === 'buy' ? 'Buy (Bid) ▲' : 'Sell (Ask) ▼'}
+            </span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Spread:</span>
+            <span class="tooltip-value">${rfq.spread > 0 ? '+' : ''}${rfq.spread} bps</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Size:</span>
+            <span class="tooltip-value">${formatAmount(rfq.size)}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Time:</span>
+            <span class="tooltip-value">${getRelativeTime(rfq.timestamp)} ago</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Outcome:</span>
+            <span class="tooltip-value" style="color: ${rfq.color}">${getOutcomeLabel(rfq.outcome)}</span>
+          </div>
+        `;
+        tooltip.style.display = 'block';
+      });
+      
+      bar.addEventListener('mousemove', (e) => {
+        tooltip.style.left = (e.clientX + 20) + 'px';
+        tooltip.style.top = (e.clientY - 20) + 'px';
+      });
+      
+      bar.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+      
+      barContainer.appendChild(bar);
+      
+      // Add size indicator on right axis (shows on hover)
+      const sizeIndicator = document.createElement('div');
+      sizeIndicator.className = 'rfq-size-indicator';
+      sizeIndicator.textContent = formatAmount(rfq.size);
+      row.appendChild(time);
+      row.appendChild(barContainer);
+      row.appendChild(sizeIndicator);
+      timeline.appendChild(row);
+    });
+    
+    // Calculate all 8 KPI metrics from v5
+    const tradedDeals = bondData.historicalRFQs.filter(r => r.outcome !== 'pass');
+    
+    // 1. Recent Performance
+    const recentDeals = tradedDeals.slice(0, 5);
+    const recentWins = recentDeals.filter(r => r.outcome === 'won' || r.outcome === 'covered').length;
+    const recentWinRate = ((recentWins / recentDeals.length) * 100).toFixed(0);
+    
+    // 2. Trend
+    const previousDeals = tradedDeals.slice(5, 10);
+    const previousWins = previousDeals.filter(r => r.outcome === 'won' || r.outcome === 'covered').length;
+    const previousWinRate = previousDeals.length > 0 ? ((previousWins / previousDeals.length) * 100) : 0;
+    const trendDiff = recentWinRate - previousWinRate;
+    const trendArrow = trendDiff > 0 ? '↗' : trendDiff < 0 ? '↘' : '→';
+    const trendColor = trendDiff > 0 ? 'positive' : trendDiff < 0 ? 'negative' : 'neutral';
+    
+    // 3. Avg Volume Trend
+    const recentVolume = recentDeals.reduce((sum, r) => sum + r.size, 0) / recentDeals.length;
+    const previousVolume = previousDeals.length > 0 ? previousDeals.reduce((sum, r) => sum + r.size, 0) / previousDeals.length : recentVolume;
+    const volumeTrendDiff = ((recentVolume - previousVolume) / previousVolume) * 100;
+    const volumeTrendArrow = volumeTrendDiff > 0 ? '↗' : volumeTrendDiff < 0 ? '↘' : '→';
+    const volumeTrendColor = volumeTrendDiff > 0 ? 'positive' : volumeTrendDiff < 0 ? 'negative' : 'neutral';
+    
+    // 4. Bid/Ask Balance
+    const bids = bondData.historicalRFQs.filter(r => r.side === 'buy').length;
+    const asks = bondData.historicalRFQs.filter(r => r.side === 'sell').length;
+    const totalSides = bids + asks;
+    const bidPercent = ((bids / totalSides) * 100).toFixed(0);
+    const askPercent = ((asks / totalSides) * 100).toFixed(0);
+    const recentBids = recentDeals.filter(r => r.side === 'buy').length;
+    const recentBidPercent = (recentBids / recentDeals.length) * 100;
+    const historicalBidPercent = (bids / totalSides) * 100;
+    const bidAskShift = Math.abs(recentBidPercent - historicalBidPercent);
+    const isWarning = bidAskShift > 30;
+    
+    // 5. Last 24h Volume
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const last24hDeals = bondData.historicalRFQs.filter(r => new Date(r.timestamp) > oneDayAgo);
+    const last24hVolume = last24hDeals.reduce((sum, r) => sum + r.size, 0);
+    
+    // 6. Total Volume
+    const totalVolume = bondData.historicalRFQs.reduce((sum, r) => sum + r.size, 0);
+    
+    // 7. Avg Deal Frequency
+    const timestamps = bondData.historicalRFQs.map(r => new Date(r.timestamp).getTime()).sort((a, b) => b - a);
+    const intervals = [];
+    for (let i = 0; i < timestamps.length - 1; i++) {
+      intervals.push(timestamps[i] - timestamps[i + 1]);
+    }
+    const avgInterval = intervals.reduce((sum, val) => sum + val, 0) / intervals.length;
+    const avgHours = (avgInterval / (1000 * 60 * 60)).toFixed(1);
+    
+    // 8. Frequency Change
+    const recentIntervals = intervals.slice(0, 3);
+    const previousIntervals = intervals.slice(3, 6);
+    const recentAvgInterval = recentIntervals.reduce((sum, val) => sum + val, 0) / recentIntervals.length;
+    const previousAvgInterval = previousIntervals.length > 0 ? previousIntervals.reduce((sum, val) => sum + val, 0) / previousIntervals.length : recentAvgInterval;
+    const freqChange = ((previousAvgInterval - recentAvgInterval) / previousAvgInterval) * 100;
+    const freqArrow = freqChange > 0 ? '↗' : freqChange < 0 ? '↘' : '→';
+    const freqColor = freqChange > 0 ? 'positive' : freqChange < 0 ? 'negative' : 'neutral';
+    const freqContext = freqChange > 0 ? 'Accelerating' : freqChange < 0 ? 'Slowing' : 'Stable';
+    
+    // Update all metrics
+    document.getElementById('recentWinRate').innerHTML = `${recentWinRate}%`;
+    document.getElementById('trendDirection').innerHTML = `<span class="${trendColor}"><span class="trend-arrow">${trendArrow}</span> ${Math.abs(trendDiff).toFixed(0)}%</span>`;
+    document.getElementById('avgVolumeTrend').innerHTML = `<span class="${volumeTrendColor}">${formatAmount(recentVolume)} <span class="trend-arrow">${volumeTrendArrow}</span></span>`;
+    
+    const bidAskCard = document.getElementById('bidAskCard');
+    const bidAskBalance = document.getElementById('bidAskBalance');
+    const bidAskContext = document.getElementById('bidAskContext');
+    if (isWarning) {
+      bidAskCard.classList.add('warning');
+      bidAskBalance.classList.add('warning');
+      bidAskBalance.innerHTML = `${bidPercent}/${askPercent} <span class="warning-icon">⚠️</span>`;
+      bidAskContext.textContent = 'Unusual shift detected';
+    } else {
+      bidAskBalance.textContent = `${bidPercent}/${askPercent}`;
+      bidAskContext.textContent = 'Normal distribution';
+    }
+    
+    document.getElementById('recentVolume').textContent = formatAmount(last24hVolume);
+    document.getElementById('totalVolume').textContent = formatAmount(totalVolume);
+    document.getElementById('avgFrequency').textContent = `${avgHours}h`;
+    document.getElementById('frequencyChange').innerHTML = `<span class="${freqColor}"><span class="trend-arrow">${freqArrow}</span> ${Math.abs(freqChange).toFixed(0)}%</span>`;
+    document.getElementById('frequencyContext').textContent = freqContext;
+  </script>
+</body>
+</html>

@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RFQ History Analysis • Decision Matrix</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a; color: #ffffff; padding: 40px; min-height: 100vh;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header { margin-bottom: 32px; }
+    .title { font-size: 14px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .security-name { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .current-price { font-size: 32px; font-weight: 700; color: #10b981; font-variant-numeric: tabular-nums; }
+    
+    .metrics-panel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 16px; }
+    .metrics-panel-extended { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+    .metric-card { background: #111; padding: 20px; border-radius: 8px; border: 1px solid #222; transition: all 0.2s ease; }
+    .metric-card:hover { border-color: #333; transform: translateY(-2px); }
+    .metric-card.warning { border-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+    .metric-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; }
+    .metric-context { font-size: 11px; color: #888; margin-top: 4px; }
+    .metric-value.positive { color: #10b981; }
+    .metric-value.negative { color: #ef4444; }
+    .metric-value.neutral { color: #fff; }
+    .metric-value.warning { color: #f59e0b; }
+    .warning-icon { font-size: 20px; color: #f59e0b; }
+    
+    .viz-container { background: #111; border-radius: 12px; padding: 40px; position: relative; }
+    .y-axis-label {
+      position: absolute; left: -100px; top: 50%; transform: translateY(-50%) rotate(-90deg);
+      font-size: 12px; font-weight: 600; color: #888;
+      text-transform: uppercase; letter-spacing: 1px; width: 200px; text-align: center;
+    }
+    .x-axis-label {
+      text-align: center; font-size: 12px; font-weight: 600; color: #888;
+      text-transform: uppercase; letter-spacing: 1px; margin-top: 16px;
+    }
+    .matrix-wrapper { position: relative; padding-left: 20px; }
+    .matrix-container {
+      display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto auto; gap: 0;
+      background: transparent; border-radius: 8px; overflow: visible; position: relative;
+    }
+    .current-price-divider-h {
+      position: absolute; left: 0; right: 0; height: 3px;
+      background: #10b981; z-index: 2; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+      pointer-events: none;
+    }
+    .current-price-divider-v {
+      position: absolute; top: 0; bottom: 0; left: 50%; width: 3px;
+      background: #10b981; z-index: 2; box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+      transform: translateX(-50%);
+    }
+    .current-price-badge {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      background: #0a0a0a; border: 2px solid #10b981; border-radius: 20px;
+      padding: 6px 16px; font-size: 11px; font-weight: 600; color: #10b981;
+      z-index: 3; white-space: nowrap; box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+      margin-top: -14px;
+    }
+    .quadrant {
+      background: #0a0a0a; padding: 32px; min-height: 300px; position: relative;
+    }
+    .quadrant.bottom-left,
+    .quadrant.bottom-right {
+      padding-top: 60px;
+    }
+    .quadrant-position-label {
+      position: absolute; top: 20px; left: 12px; font-size: 10px; color: #666;
+      text-transform: uppercase; letter-spacing: 0.5px; background: rgba(0, 0, 0, 0.5);
+      padding: 4px 8px; border-radius: 4px;
+    }
+    .quadrant.top-left .quadrant-position-label { color: #10b981; }
+    .quadrant.top-right .quadrant-position-label { color: #ef4444; }
+    .quadrant.bottom-left .quadrant-position-label { color: #10b981; }
+    .quadrant.bottom-right .quadrant-position-label { color: #ef4444; }
+    .quadrant-header { margin-bottom: 20px; margin-top: 20px; }
+    .quadrant-title {
+      font-size: 14px; font-weight: 600; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .quadrant-count { font-size: 32px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .quadrant.top-left { border-top: 3px solid #10b981; }
+    .quadrant.top-left .quadrant-count { color: #10b981; }
+    .quadrant.top-right { border-top: 3px solid #ef4444; }
+    .quadrant.top-right .quadrant-count { color: #ef4444; }
+    .quadrant.bottom-left { border-bottom: 3px solid #10b981; }
+    .quadrant.bottom-left .quadrant-count { color: #10b981; }
+    .quadrant.bottom-right { border-bottom: 3px solid #ef4444; }
+    .quadrant.bottom-right .quadrant-count { color: #ef4444; }
+    .deals-list { display: flex; flex-direction: column; gap: 8px; }
+    .deal-item {
+      display: flex; align-items: center; padding: 10px 12px; background: #111;
+      border-radius: 6px; cursor: pointer; transition: all 0.2s ease; position: relative;
+      border-left: 6px solid transparent;
+    }
+    .deal-item:hover { transform: translateX(4px); background: #1a1a1a; }
+    .deal-info {
+      flex: 1; display: flex; justify-content: space-between;
+      align-items: center;
+    }
+    .deal-left { display: flex; align-items: center; gap: 8px; }
+    .deal-side {
+      font-size: 14px; font-weight: 700;
+    }
+    .deal-side.buy { color: #3b82f6; }
+    .deal-side.sell { color: #f97316; }
+    .deal-spread {
+      font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+    }
+    .deal-details { display: flex; gap: 12px; align-items: center; }
+    .deal-size {
+      font-size: 11px; color: rgba(255,255,255,0.7); font-variant-numeric: tabular-nums;
+    }
+    .deal-time {
+      font-size: 10px; color: rgba(255,255,255,0.5); font-variant-numeric: tabular-nums;
+    }
+    
+    .legend {
+      display: flex; gap: 24px; margin-top: 24px; padding-top: 24px; border-top: 1px solid #222;
+      justify-content: center; flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: #888;
+    }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+    .legend-arrow { font-size: 16px; font-weight: 700; }
+    .tooltip {
+      position: fixed; background: rgba(0, 0, 0, 0.95); border: 1px solid #333;
+      border-radius: 8px; padding: 12px 16px; font-size: 12px;
+      pointer-events: none; z-index: 1000; display: none;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+    .tooltip-row {
+      display: flex; justify-content: space-between; margin-bottom: 4px; gap: 20px;
+    }
+    .tooltip-row:last-child { margin-bottom: 0; }
+    .tooltip-label { color: #888; }
+    .tooltip-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .tooltip-divider { 
+      border-top: 1px solid #333; 
+      margin: 8px 0; 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">RFQ History Analysis • Decision Matrix</div>
+      <div class="security-name" id="securityName"></div>
+      <div class="current-price" id="currentPrice"></div>
+    </div>
+    
+    <div class="metrics-panel">
+      <div class="metric-card">
+        <div class="metric-label">Premium Win Rate</div>
+        <div class="metric-value" id="premiumWinRate"></div>
+        <div class="metric-context">Above current price</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Discount Win Rate</div>
+        <div class="metric-value" id="discountWinRate"></div>
+        <div class="metric-context">Below current price</div>
+      </div>
+      <div class="metric-card" id="bidAskCard">
+        <div class="metric-label">Bid/Ask Balance</div>
+        <div class="metric-value neutral" id="bidAskBalance"></div>
+        <div class="metric-context" id="bidAskContext">Normal distribution</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Total Volume</div>
+        <div class="metric-value neutral" id="totalVolume"></div>
+        <div class="metric-context">All deals</div>
+      </div>
+    </div>
+    
+    <div class="metrics-panel-extended">
+      <div class="metric-card">
+        <div class="metric-label">Avg Premium Win Spread</div>
+        <div class="metric-value positive" id="avgPremiumSpread"></div>
+        <div class="metric-context">Winning deals above price</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Max Lost Spread</div>
+        <div class="metric-value negative" id="maxLostSpread"></div>
+        <div class="metric-context">Highest losing spread</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Discount Losses</div>
+        <div class="metric-value neutral" id="discountLossCount"></div>
+        <div class="metric-context">Lost at discounted prices</div>
+      </div>
+      <div class="metric-card" id="pricingCard">
+        <div class="metric-label">Pricing Strategy</div>
+        <div class="metric-value" id="pricingStrategy"></div>
+        <div class="metric-context" id="pricingContext">Market positioning</div>
+      </div>
+    </div>
+    
+    <div class="viz-container">
+      <div class="matrix-wrapper">
+        <div class="y-axis-label">PRICING POSITION</div>
+        <div class="matrix-container">
+          <div class="current-price-divider-h"></div>
+          <div class="current-price-divider-v"></div>
+          <div class="current-price-badge">Current Price: <span id="currentPriceLabel"></span></div>
+          
+          <div class="quadrant top-left">
+            <div class="quadrant-position-label">Premium • Won</div>
+            <div class="quadrant-header">
+              <div class="quadrant-title"><span>Above Current</span><span style="color:#10b981;">✓ Won</span><span style="color:#888;font-size:12px;font-weight:400;margin-left:8px;">• Success</span></div>
+              <div class="quadrant-count" id="premiumWonCount">0</div>
+            </div>
+            <div class="deals-list" id="premiumWonDeals"></div>
+          </div>
+          
+          <div class="quadrant top-right">
+            <div class="quadrant-position-label">Premium • Lost</div>
+            <div class="quadrant-header">
+              <div class="quadrant-title"><span>Above Current</span><span style="color:#ef4444;">✗ Lost</span><span style="color:#888;font-size:12px;font-weight:400;margin-left:8px;">• Too aggressive?</span></div>
+              <div class="quadrant-count" id="premiumLostCount">0</div>
+            </div>
+            <div class="deals-list" id="premiumLostDeals"></div>
+          </div>
+          
+          <div class="quadrant bottom-left">
+            <div class="quadrant-position-label">Discount • Won</div>
+            <div class="quadrant-header">
+              <div class="quadrant-title"><span>Below Current</span><span style="color:#10b981;">✓ Won</span><span style="color:#888;font-size:12px;font-weight:400;margin-left:8px;">• Left money on table?</span></div>
+              <div class="quadrant-count" id="discountWonCount">0</div>
+            </div>
+            <div class="deals-list" id="discountWonDeals"></div>
+          </div>
+          
+          <div class="quadrant bottom-right">
+            <div class="quadrant-position-label">Discount • Lost</div>
+            <div class="quadrant-header">
+              <div class="quadrant-title"><span>Below Current</span><span style="color:#ef4444;">✗ Lost</span><span style="color:#888;font-size:12px;font-weight:400;margin-left:8px;">• Red flag, market issue?</span></div>
+              <div class="quadrant-count" id="discountLostCount">0</div>
+            </div>
+            <div class="deals-list" id="discountLostDeals"></div>
+          </div>
+        </div>
+        <div class="x-axis-label">OUTCOME (Won ← → Lost)</div>
+      </div>
+      
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div><span>Won</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444;"></div><span>Lost</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#eab308;"></div><span>Covered</span></div>
+        <div class="legend-item"><div class="legend-dot" style="background:#9ca3af;"></div><span>Pass</span></div>
+        <div class="legend-item"><span class="legend-arrow" style="color:#3b82f6;">▲</span><span>Buy (Bid)</span></div>
+        <div class="legend-item"><span class="legend-arrow" style="color:#f97316;">▼</span><span>Sell (Ask)</span></div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="tooltip" id="tooltip"></div>
+
+  <script>
+    // Updated data from Direction 1 - realistic market data with cover prices
+    const bondData = {
+      currentPrice: 0,
+      currentPriceValue: "87.966",
+      securityName: "ERSTBK 3.250 08/27/32C31",
+      historicalRFQs: [
+        // Recent RFQs (last 2 days) - Bids below current, Asks above
+        { id: 1, timestamp: "2025-10-28T14:30:00", spread: -8, size: 5000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -10 },
+        { id: 2, timestamp: "2025-10-28T11:15:00", spread: 12, size: 3000000, outcome: "lost", color: "#ef4444", side: "sell", coverSpread: 10 },
+        { id: 3, timestamp: "2025-10-27T16:45:00", spread: -15, size: 8000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -18 },
+        { id: 4, timestamp: "2025-10-27T10:20:00", spread: 5, size: 4500000, outcome: "covered", color: "#eab308", side: "sell", coverSpread: 3 },
+        
+        // Mid-period RFQs (3-5 days ago)
+        { id: 5, timestamp: "2025-10-25T14:00:00", spread: 20, size: 2000000, outcome: "lost", color: "#ef4444", side: "sell", coverSpread: 18 },
+        { id: 6, timestamp: "2025-10-24T09:30:00", spread: -5, size: 6000000, outcome: "pass", color: "#9ca3af", side: "buy" },
+        { id: 7, timestamp: "2025-10-23T15:45:00", spread: -18, size: 3500000, outcome: "covered", color: "#eab308", side: "buy", coverSpread: -20 },
+        
+        // Older RFQs (1+ weeks ago)
+        { id: 8, timestamp: "2025-10-22T11:00:00", spread: 8, size: 5500000, outcome: "won", color: "#10b981", side: "sell", coverSpread: 11 },
+        { id: 9, timestamp: "2025-10-21T13:20:00", spread: -22, size: 2500000, outcome: "lost", color: "#ef4444", side: "buy", coverSpread: -20 },
+        { id: 10, timestamp: "2025-10-18T10:15:00", spread: -12, size: 7000000, outcome: "won", color: "#10b981", side: "buy", coverSpread: -14 }
+      ]
+    };
+
+    function getRelativeTime(timestamp) {
+      const now = new Date();
+      const past = new Date(timestamp);
+      const diffMs = now - past;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays === 1) return '1d ago';
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return `${Math.floor(diffDays / 7)}w ago`;
+    }
+
+    function formatAmount(amount) {
+      return `€${(amount / 1000000).toFixed(1)}M`;
+    }
+
+    function getOutcomeLabel(outcome) {
+      return { won: 'Won', lost: 'Lost', covered: 'Covered', pass: 'Pass' }[outcome] || outcome;
+    }
+
+    // Set header info
+    document.getElementById('securityName').textContent = bondData.securityName;
+    document.getElementById('currentPrice').textContent = bondData.currentPriceValue;
+    document.getElementById('currentPriceLabel').textContent = bondData.currentPriceValue;
+
+    // Separate deals into quadrants
+    const tradedDeals = bondData.historicalRFQs.filter(d => d.outcome !== 'pass');
+    const premiumWon = tradedDeals.filter(d => d.spread > 0 && (d.outcome === 'won' || d.outcome === 'covered'));
+    const premiumLost = tradedDeals.filter(d => d.spread > 0 && d.outcome === 'lost');
+    const discountWon = tradedDeals.filter(d => d.spread < 0 && (d.outcome === 'won' || d.outcome === 'covered'));
+    const discountLost = tradedDeals.filter(d => d.spread < 0 && d.outcome === 'lost');
+
+    const tooltip = document.getElementById('tooltip');
+
+    function createDealItem(deal) {
+      const item = document.createElement('div');
+      item.className = 'deal-item';
+      item.style.borderLeftColor = deal.color;
+
+      const info = document.createElement('div');
+      info.className = 'deal-info';
+
+      const left = document.createElement('div');
+      left.className = 'deal-left';
+
+      const side = document.createElement('span');
+      side.className = `deal-side ${deal.side === 'buy' ? 'buy' : 'sell'}`;
+      side.textContent = deal.side === 'buy' ? '▲' : '▼';
+
+      const spread = document.createElement('span');
+      spread.className = 'deal-spread';
+      spread.textContent = `${deal.spread > 0 ? '+' : ''}${deal.spread} bps`;
+
+      left.appendChild(side);
+      left.appendChild(spread);
+
+      const details = document.createElement('div');
+      details.className = 'deal-details';
+
+      const size = document.createElement('span');
+      size.className = 'deal-size';
+      size.textContent = formatAmount(deal.size);
+
+      const time = document.createElement('span');
+      time.className = 'deal-time';
+      time.textContent = getRelativeTime(deal.timestamp);
+
+      details.appendChild(size);
+      details.appendChild(time);
+
+      info.appendChild(left);
+      info.appendChild(details);
+      item.appendChild(info);
+
+      // Enhanced tooltip with cover price information
+      item.addEventListener('mouseenter', (e) => {
+        let tooltipHTML = `
+          <div class="tooltip-row">
+            <span class="tooltip-label">Side:</span>
+            <span class="tooltip-value" style="color: ${deal.side === 'buy' ? '#3b82f6' : '#f97316'}">
+              ${deal.side === 'buy' ? 'Buy (Bid) ▲' : 'Sell (Ask) ▼'}
+            </span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Spread:</span>
+            <span class="tooltip-value">${deal.spread > 0 ? '+' : ''}${deal.spread} bps</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Size:</span>
+            <span class="tooltip-value">${formatAmount(deal.size)}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Time:</span>
+            <span class="tooltip-value">${getRelativeTime(deal.timestamp)}</span>
+          </div>
+          <div class="tooltip-row">
+            <span class="tooltip-label">Outcome:</span>
+            <span class="tooltip-value" style="color: ${deal.color}">${getOutcomeLabel(deal.outcome)}</span>
+          </div>
+        `;
+
+        // Add cover price information if available
+        if (deal.coverSpread !== undefined) {
+          const margin = Math.abs(deal.coverSpread - deal.spread);
+          tooltipHTML += '<div class="tooltip-divider"></div>';
+          
+          if (deal.outcome === 'won') {
+            tooltipHTML += `
+              <div class="tooltip-row">
+                <span class="tooltip-label">Opportunity:</span>
+                <span class="tooltip-value" style="color: #eab308">${margin} bps left on table</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">2nd Best Price:</span>
+                <span class="tooltip-value">${deal.coverSpread > 0 ? '+' : ''}${deal.coverSpread} bps</span>
+              </div>
+            `;
+          } else if (deal.outcome === 'covered') {
+            tooltipHTML += `
+              <div class="tooltip-row">
+                <span class="tooltip-label">Cover Margin:</span>
+                <span class="tooltip-value" style="color: #10b981">+${margin} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Cover Price:</span>
+                <span class="tooltip-value">${deal.coverSpread > 0 ? '+' : ''}${deal.coverSpread} bps</span>
+              </div>
+            `;
+          } else if (deal.outcome === 'lost') {
+            tooltipHTML += `
+              <div class="tooltip-row">
+                <span class="tooltip-label">Lost By:</span>
+                <span class="tooltip-value" style="color: #ef4444">${margin} bps</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Winning Price:</span>
+                <span class="tooltip-value">${deal.coverSpread > 0 ? '+' : ''}${deal.coverSpread} bps</span>
+              </div>
+            `;
+          }
+        }
+
+        tooltip.innerHTML = tooltipHTML;
+        tooltip.style.display = 'block';
+      });
+
+      item.addEventListener('mousemove', (e) => {
+        tooltip.style.left = (e.clientX + 20) + 'px';
+        tooltip.style.top = (e.clientY - 20) + 'px';
+      });
+
+      item.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+      });
+
+      return item;
+    }
+
+    // Populate quadrants
+    document.getElementById('premiumWonCount').textContent = premiumWon.length;
+    document.getElementById('premiumLostCount').textContent = premiumLost.length;
+    document.getElementById('discountWonCount').textContent = discountWon.length;
+    document.getElementById('discountLostCount').textContent = discountLost.length;
+
+    premiumWon.forEach(deal => document.getElementById('premiumWonDeals').appendChild(createDealItem(deal)));
+    premiumLost.forEach(deal => document.getElementById('premiumLostDeals').appendChild(createDealItem(deal)));
+    discountWon.forEach(deal => document.getElementById('discountWonDeals').appendChild(createDealItem(deal)));
+    discountLost.forEach(deal => document.getElementById('discountLostDeals').appendChild(createDealItem(deal)));
+
+    // Calculate metrics
+    const premiumDeals = [...premiumWon, ...premiumLost];
+    const discountDeals = [...discountWon, ...discountLost];
+    
+    const premiumWinRateValue = premiumDeals.length > 0 ? 
+      ((premiumWon.length / premiumDeals.length) * 100).toFixed(0) : 0;
+    const discountWinRateValue = discountDeals.length > 0 ? 
+      ((discountWon.length / discountDeals.length) * 100).toFixed(0) : 0;
+
+    document.getElementById('premiumWinRate').textContent = `${premiumWinRateValue}%`;
+    document.getElementById('premiumWinRate').className = `metric-value ${premiumWinRateValue >= 50 ? 'positive' : 'negative'}`;
+    document.getElementById('discountWinRate').textContent = `${discountWinRateValue}%`;
+    document.getElementById('discountWinRate').className = `metric-value ${discountWinRateValue >= 50 ? 'positive' : 'negative'}`;
+
+    // Bid/Ask Balance
+    const bids = bondData.historicalRFQs.filter(d => d.side === 'buy').length;
+    const asks = bondData.historicalRFQs.filter(d => d.side === 'sell').length;
+    const totalSides = bids + asks;
+    const bidPercent = ((bids / totalSides) * 100).toFixed(0);
+    const askPercent = ((asks / totalSides) * 100).toFixed(0);
+    
+    const recentDeals = tradedDeals.slice(0, 5);
+    const recentBids = recentDeals.filter(d => d.side === 'buy').length;
+    const recentBidPercent = (recentBids / recentDeals.length) * 100;
+    const historicalBidPercent = (bids / totalSides) * 100;
+    const bidAskShift = Math.abs(recentBidPercent - historicalBidPercent);
+    const isWarning = bidAskShift > 30;
+
+    const bidAskCard = document.getElementById('bidAskCard');
+    const bidAskBalance = document.getElementById('bidAskBalance');
+    const bidAskContext = document.getElementById('bidAskContext');
+
+    if (isWarning) {
+      bidAskCard.classList.add('warning');
+      bidAskBalance.classList.add('warning');
+      bidAskBalance.innerHTML = `${bidPercent}/${askPercent} <span class="warning-icon">⚠️</span>`;
+      bidAskContext.textContent = 'Unusual shift detected';
+    } else {
+      bidAskBalance.textContent = `${bidPercent}/${askPercent}`;
+    }
+
+    // Total Volume
+    const totalVolume = bondData.historicalRFQs.reduce((sum, d) => sum + d.size, 0);
+    document.getElementById('totalVolume').textContent = formatAmount(totalVolume);
+
+    // Additional metrics
+    const avgPremiumSpread = premiumWon.length > 0 ? 
+      (premiumWon.reduce((sum, d) => sum + d.spread, 0) / premiumWon.length).toFixed(1) : 0;
+    
+    const allLost = [...premiumLost, ...discountLost];
+    const maxLostSpread = allLost.length > 0 ? 
+      Math.max(...allLost.map(d => Math.abs(d.spread))) : 0;
+
+    document.getElementById('avgPremiumSpread').textContent = premiumWon.length > 0 ? 
+      `+${avgPremiumSpread} bps` : 'N/A';
+    document.getElementById('maxLostSpread').textContent = allLost.length > 0 ? 
+      `${maxLostSpread} bps` : '0 bps';
+    document.getElementById('discountLossCount').textContent = discountLost.length;
+
+    // Pricing Strategy
+    const pricingStrategy = discountWinRateValue < 40 && discountDeals.length > 2 ? 'Aggressive' : 'Balanced';
+    const pricingCard = document.getElementById('pricingCard');
+    const pricingStrategyEl = document.getElementById('pricingStrategy');
+    const pricingContext = document.getElementById('pricingContext');
+
+    pricingStrategyEl.textContent = pricingStrategy;
+    pricingStrategyEl.className = `metric-value ${pricingStrategy === 'Aggressive' ? 'positive' : 'neutral'}`;
+    pricingContext.textContent = pricingStrategy === 'Aggressive' ? 
+      'Room to price up' : 'Current approach working';
+
+    // Position horizontal divider at the boundary between top and bottom quadrants
+    function positionDivider() {
+      const topLeftQuadrant = document.querySelector('.quadrant.top-left');
+      const dividerH = document.querySelector('.current-price-divider-h');
+      const badge = document.querySelector('.current-price-badge');
+      
+      if (topLeftQuadrant && dividerH && badge) {
+        const quadrantHeight = topLeftQuadrant.offsetHeight;
+        dividerH.style.top = `${quadrantHeight}px`;
+        badge.style.top = `${quadrantHeight}px`;
+      }
+    }
+    
+    // Position on load and on window resize
+    positionDivider();
+    window.addEventListener('resize', positionDivider);
+  </script>
+</body>
+</html>
